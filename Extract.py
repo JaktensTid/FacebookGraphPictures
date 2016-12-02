@@ -4,14 +4,13 @@ from multiprocessing.pool import Pool
 from aiohttp import ClientSession
 import csv
 import json
-import py_compile
-py_compile.compile('Extract.py')
+from datetime import datetime
 
 MAX_USERS = 1200000000
 USER_URL = 'http://facebook.com/profile.php?id=%s'
 GRAPH_URL = 'http://graph.facebook.com/%s/picture?width=100&height=100&redirect=false'
-MAX_CHUNK_LENGTH = 100000
-MIN_MULTIPROCESSED_LENGTH = 400000
+MAX_CHUNK_LENGTH = 40000
+MIN_MULTIPROCESSED_LENGTH = 100000
 
 async def fetch(url, id, session):
     async with session.get(url) as response:
@@ -25,7 +24,7 @@ async def bound_fetch(sem, url, id, session):
 
 async def run(begin, end, file_end):
     tasks = []
-    sem = asyncio.Semaphore(50)
+    sem = asyncio.Semaphore(1000)
     async with ClientSession() as session:
         for id in range(begin,end):
             task = asyncio.ensure_future(bound_fetch(sem, GRAPH_URL % id, id, session))
@@ -33,7 +32,7 @@ async def run(begin, end, file_end):
 
         responses = asyncio.gather(*tasks)
         await responses
-        with open('Facebook faces %s.csv' % file_end, 'a') as csvfile:
+        with open('%s Facebook faces .csv' % file_end, 'a') as csvfile:
             spamwriter = csv.writer(csvfile, delimiter=',',
                                     quotechar='"', quoting=csv.QUOTE_MINIMAL)
             spamwriter.writerow(['UserID','AvatarURL'])
@@ -44,12 +43,14 @@ async def run(begin, end, file_end):
 
 
 def threaded(t):
+    print('Thread started. Begin: ' + str(t[0]) + ' - End: ' + str(t[1]))
     loop = asyncio.get_event_loop()
     future = asyncio.ensure_future(run(t[0],t[1],t[2]))
     loop.run_until_complete(future)
 
 
 def main(begin, end):
+    print('Beginning in: ' + str(datetime.now()))
     if begin > end:
         t = end
         end = begin
