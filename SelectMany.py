@@ -8,10 +8,7 @@ def main():
     response = requests.post(URL_SCELETON, data=data)
     htmlTextApproved = response.text
     splitted = htmlTextApproved.split(' ')
-    splitted =['http://facebook.com/%s' % id.split(',')[-1] for id in splitted]
-    with open('ids.txt','a') as file:
-        for s in splitted:
-            file.write(s + ' , ')
+    with open
 
 if __name__ == "__main__":
     main()
