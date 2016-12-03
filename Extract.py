@@ -67,8 +67,15 @@ def threaded(t):
 def get_chunks(tables, begin, end):
     chunks = []
     for table in tables:
+        cb = False
+        ce = False
         if range_contains(table['range'][0], table['range'][1], begin):
-            chunks.append({'tname':table['name'],'from':table['range'][1] - begin,'to':table['range'][0]})
+            chunks.append({'tname':table['name'],'from':table['max'] - (table['range'][1] - begin),'to':table['max']})
+        if range_contains(table['range'][0], table['range'][1], end):
+            chunks.append({'tname': table['name'], 'from': 0, 'to': end - table['range'][0]})
+        if not cb and not ce:
+            chunks.append({'tname':table['name'], 'from':0, 'to':table['max']})
+    return chunks
 
 def range_contains(f, t, number):
     return f <= number <= t
@@ -106,7 +113,7 @@ def main(begin, end):
                        or range_contains(table['range'][0], table['range'][1], begin)
                        or range_contains(table['range'][0], table['range'][1], end)]
 
-
+    chunks = get_chunks(covering_tables, begin, end)
 
     #p = Pool(cpu_count())
     # begin end file_end
