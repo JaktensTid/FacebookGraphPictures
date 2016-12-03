@@ -23,8 +23,8 @@ def get_tables():
     creator = lambda splitted: {'name': splitted[0], 'max': int(splitted[1])}
     chunks = [creator(chunk.split(',')) for chunk in chunks]
     for i in range(len(chunks)):
-        chunks[i]['range'] = (
-        sum([r['max'] for r in chunks[0:i]]), chunks[i]['max'] + sum([r['max'] for r in chunks[0:i]]))
+        chunks[i]['range'] = (sum([r['max'] for r in chunks[0:i]]),
+        chunks[i]['max'] + sum([r['max'] for r in chunks[0:i]]))
     return chunks
 
 
@@ -81,7 +81,7 @@ def get_chunks(tables, begin, end):
             parts = int(count / working_size)
         if (max - min) % parts != 0:
             balance = max - (working_size * parts)
-        creator = lambda b, e: {'tfrom':b, 'tto': e, 'filename':str(b) + '-' + str(e), 'tablename':tname}
+        creator = lambda b, e: {'tfrom':b if b != 0 else b + 1, 'tto': e, 'filename':str(b) + '-' + str(e), 'tablename':tname}
         fp = [creator(int((min + working_size * i) + (1 if i != 0 else 0)), int(min + working_size * (i + 1)))
                 for i in range(parts)]
         sp = [creator(max - balance + 1 + min, max)] if balance != 0 else []
@@ -105,8 +105,8 @@ def get_chunks(tables, begin, end):
             chunks[i]['mapfrom'] = summa
             chunks[i]['mapto'] = summa + chunks[i]['tto'] - chunks[i]['tfrom']
         else:
-            chunks[i]['mapfrom'] = chunks[i-1]['mapto']
-            chunks[i]['mapto'] = chunks[i-1]['mapto'] + chunks[i]['tto'] - chunks[i]['tfrom']
+            chunks[i]['mapfrom'] = chunks[i-1]['mapto'] + 1
+            chunks[i]['mapto'] = chunks[i-1]['mapto'] + chunks[i]['tto'] - chunks[i]['tfrom'] + 1
 
     return chunks
 
@@ -150,15 +150,23 @@ def main(begin, end):
                        or range_contains(table['range'][0], table['range'][1], end)]
 
     chunks = get_chunks(covering_tables, begin, end)
+    test(chunks,begin,end)
     #for chunks
-    p = Pool(cpu_count())
-    p.map(threaded, chunks)
+    #p = Pool(cpu_count())
+    #p.map(threaded, chunks)
     print('ENDED PROCESSING OF ' + str(end - begin) + ' URLS')
 
 
 def test(chunks, begin, end):
-    assert sum([chunk['to'] for chunk in chunks]) - sum([chunk['from'] for chunk in chunks]) == end - begin
-
+    assert sum([chunk['tto'] for chunk in chunks]) - sum([chunk['tfrom'] for chunk in chunks]) == end - begin
 
 if __name__ == '__main__':
-    main(15, 5000)
+    main(98999999, 100000000)
+
+
+#==================================================================
+#                                                                 |
+#          CREATED BY IGOR BRUEV                                  |
+#    - - - https://www.upwork.com/freelancers/~018d5b2b15314271cd |
+#                                                                 |
+#==================================================================
