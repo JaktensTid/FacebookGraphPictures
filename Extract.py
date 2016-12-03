@@ -14,7 +14,6 @@ SELECT_MANY_URL = 'http://app.thefacesoffacebook.com/php/select_many_fbid.php?'
 GET_INFO_FROM_TABLES_URL = 'http://app.thefacesoffacebook.com/php/get_info_from_tables.php'
 MAX_CHUNK_LENGTH = 10000
 
-
 def get_tables():
     # Facebook faces ids divided by tables. We have to get them
     response = requests.get(GET_INFO_FROM_TABLES_URL)
@@ -65,29 +64,66 @@ def threaded(t):
     loop.run_until_complete(future)
 
 def get_chunks(tables, begin, end):
+    def add_work_parts(chunk):
+        """Add to the every table parts for threading"""
+        cfrom = chunk['from']
+        cto = chunk['to']
+        count = cto - cfrom
+        parts = cpu_count()
+        balance = 0
+        working_size = int((cto - cfrom) / parts)
+        if working_size > MAX_CHUNK_LENGTH:
+            working_size = MAX_CHUNK_LENGTH
+            parts = int(count / working_size)
+        if (cto - cfrom) % parts != 0:
+            balance = cto - (working_size * parts)
+        creator = lambda b, e: (b, e, str(b) + '-' + str(e))
+        chunk['parts'] = [creator(int((cfrom + working_size * i) + 1), int(cfrom + working_size * (i + 1)))
+                  for i in range(parts)] + [creator(cto - balance + 1 + cfrom, cto)] if balance != 0 else []
+        return chunk
     chunks = []
+    #Distribute input begin and end to tables
     for table in tables:
-        cb = False
-        ce = False
         if range_contains(table['range'][0], table['range'][1], begin):
-            chunks.append({'tname':table['name'],'from':table['max'] - (table['range'][1] - begin),'to':table['max']})
+            chunk = {'tname':table['name'],
+                           'from':table['max'] - (table['range'][1] - begin),
+                           'to':table['max'] if end > table['range'][1] else end}
+            chunks.append(add_work_parts(chunk))
+            continue
         if range_contains(table['range'][0], table['range'][1], end):
-            chunks.append({'tname': table['name'], 'from': 0, 'to': end - table['range'][0]})
-        if not cb and not ce:
-            chunks.append({'tname':table['name'], 'from':0, 'to':table['max']})
+            chunk = {'tname': table['name'],
+                           'from': 0,
+                           'to': end - table['range'][0]}
+            chunks.append(add_work_parts(chunk))
+            continue
+        chunk = {'tname':table['name'],
+                       'from':0,
+                       'to':table['max']}
+        chunks.append(add_work_parts(chunk))
+
     return chunks
 
 def range_contains(f, t, number):
     return f <= number <= t
 
-def main(begin, end):
-    tables = get_tables()
+def is_error(tables,begin,end):
     summa = sum([table['max'] for table in tables])
-    print('Total number of faces on the website: ' + str(summa))
-
     if begin > summa or end > summa:
         print('ERROR: Max id should be less than %s of faces on the website' % int(summa))
+        return True
+    if begin == end:
+        print('ERROR: Begin = end')
+        return True
+    if begin < 0 or end < 0:
+        print("ERROR: Ids can't be less, that 0")
+
+
+def main(begin, end):
+    tables = get_tables()
+
+    if(is_error(tables,begin,end)):
         return
+
     print('Beginning in: ' + str(datetime.now()))
 
     # Swap begin and end, if begin > end
@@ -96,32 +132,19 @@ def main(begin, end):
         end = begin
         begin = t
 
-    count = end - begin
-    parts = cpu_count()
-    balance = 0
-    chunk_size = int((end - begin) / parts)
-
-    if chunk_size > MAX_CHUNK_LENGTH:
-        chunk_size = MAX_CHUNK_LENGTH
-        parts = int(count / chunk_size)
-
-    if (end - begin) % parts != 0:
-        balance = end - (chunk_size * parts)
-
     covering_tables = [table for table in tables
                  if (table['range'][0] > begin and table['range'][1] < end)
                        or range_contains(table['range'][0], table['range'][1], begin)
                        or range_contains(table['range'][0], table['range'][1], end)]
 
-    chunks = get_chunks(covering_tables, begin, end)
-
+    chunks = get_chunks(covering_tables,begin,end)
     #p = Pool(cpu_count())
-    # begin end file_end
     #p.map(threaded, chunks)
     print('ENDED PROCESSING OF ' + str(end - begin) + ' URLS')
 
 
-
+def test(chunks,begin,end):
+    assert sum([chunk['to'] for chunk in chunks]) - sum([chunk['from'] for chunk in chunks]) == end - begin
 
 if __name__ == '__main__':
-    main(11, 18353243)
+    main(1, 1000000000)
