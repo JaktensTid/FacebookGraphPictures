@@ -48,24 +48,26 @@ async def run(ids, file_end):
 
         responses = asyncio.gather(*tasks)
         await responses
-        with open('%s Facebook faces.csv' % file_end, 'a') as csvfile:
-            spamwriter = csv.writer(csvfile, delimiter=',',
-                                    quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            spamwriter.writerow(['UserID', 'AvatarURL'])
-            for response in responses._result:
-                j = json.loads(response[0].decode('utf-8'))
-                if 'error' not in j and not j['is_silhouette']:
-                    spamwriter.writerow([USER_URL % response[1], j['data']['url']])
+        data = {}
+        for response in responses._result:
+            j = json.loads(response[0].decode('utf-8'))
+            data[USER_URL % response[1]] = j['data']['url']
+        with open('%s Facebook faces.json' % file_end, 'a') as outfile:
+            json.dump(data, outfile)
 
 
-def threaded(t):
+def threaded(chunk):
     # Use all cores of CPU + multithreaded requests
-    print('Thread started. Begin: ' + str(t[0]) + ' - End: ' + str(t[1]))
-    header = ','.join([range(t[0],t[1])])
+    print('Thread started. Begin: ' + str(chunk['mapfrom']) + ' - End: ' + str(chunk['mapto']))
+    map_ids = list(range(chunk['mapfrom'], chunk['mapto']))
+    table_ids = list(range(chunk['tfrom'],chunk['tto']))
+    zipped = zip(map_ids,table_ids)
+    header = ','.join([str(m) + ' ' + chunk['tablename'] + ' ' + str(t) for m,t in zipped])
     data = {'data': header}
-    response = requests.post(SELECT_MANY_URL, data=data)
+    response = requests.post(SELECT_MANY_URL, data=data).text.split(' ')[:-1]
+    items = [item.split(',')[1] for item in response]
     loop = asyncio.get_event_loop()
-    future = asyncio.ensure_future(run(t[0], t[1], t[2]))
+    future = asyncio.ensure_future(run(items,chunk['filename']))
     loop.run_until_complete(future)
 
 
@@ -79,9 +81,9 @@ def get_chunks(tables, begin, end):
         if working_size > MAX_CHUNK_LENGTH:
             working_size = MAX_CHUNK_LENGTH
             parts = int(count / working_size)
-        if (max - min) % parts != 0:
-            balance = max - (working_size * parts)
-        creator = lambda b, e: {'tfrom':b if b != 0 else b + 1, 'tto': e, 'filename':str(b) + '-' + str(e), 'tablename':tname}
+        #f (max - min) % parts != 0:
+        balance = max - (working_size * parts)
+        creator = lambda b, e: {'tfrom':b if b != 0 else b + 1, 'tto': e, 'tablename':tname}
         fp = [creator(int((min + working_size * i) + (1 if i != 0 else 0)), int(min + working_size * (i + 1)))
                 for i in range(parts)]
         sp = [creator(max - balance + 1 + min, max)] if balance != 0 else []
@@ -107,7 +109,7 @@ def get_chunks(tables, begin, end):
         else:
             chunks[i]['mapfrom'] = chunks[i-1]['mapto'] + 1
             chunks[i]['mapto'] = chunks[i-1]['mapto'] + chunks[i]['tto'] - chunks[i]['tfrom'] + 1
-
+        chunks[i]['filename'] = str(chunks[i]['mapfrom']) + ' - ' + str(chunks[i]['mapto'])
     return chunks
 
 
@@ -150,18 +152,18 @@ def main(begin, end):
                        or range_contains(table['range'][0], table['range'][1], end)]
 
     chunks = get_chunks(covering_tables, begin, end)
-    test(chunks,begin,end)
-    #for chunks
-    #p = Pool(cpu_count())
-    #p.map(threaded, chunks)
+    #test(chunks,begin,end)
+    p = Pool(cpu_count())
+    p.map(threaded, chunks)
     print('ENDED PROCESSING OF ' + str(end - begin) + ' URLS')
 
 
 def test(chunks, begin, end):
-    assert sum([chunk['tto'] for chunk in chunks]) - sum([chunk['tfrom'] for chunk in chunks]) == end - begin
+    assert sum([chunk['tto'] for chunk in chunks]) - sum([chunk['tfrom'] for chunk in chunks]) + len(chunks) - 1 == end - begin
+
 
 if __name__ == '__main__':
-    main(98999999, 100000000)
+    main(98000000, 100000000)
 
 
 #==================================================================
